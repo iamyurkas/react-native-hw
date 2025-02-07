@@ -1,16 +1,30 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
   Image,
-  Keyboard,
   Pressable,
   Dimensions,
   StyleSheet,
   FlatList,
-  SafeAreaView,
+  ActivityIndicator,
 } from "react-native";
-import * as ImagePicker from 'expo-image-picker';
+import { useDispatch, useSelector } from "react-redux";
+import { logoutUser } from "../redux/user/userOperations";
+import {
+  selectUser,
+  selectIsLoading,
+  selectError,
+} from "../redux/user/userSelectors";
+import {
+  selectPosts,
+  selectPostsLoading,
+  selectPostsError,
+  selectLastCreatedPost,
+} from "../redux/post/postSelectors";
+import { loadPosts } from "../redux/post/postOperations";
+
+import * as ImagePicker from "expo-image-picker";
 
 import { colors } from "../../styles/global";
 import CirclePlusSvg from "../../icons/CirclePlusSvg";
@@ -19,16 +33,35 @@ import Post from "../components/Post";
 import LogoutButton from "../components/LogoutButton";
 const { width: SCREEN_WIDTH } = Dimensions.get("screen");
 
-const RegistrationScreen = ({  navigation }) => {
-  const [photo, setPhoto] = useState('');
- 
+const RegistrationScreen = ({ navigation }) => {
+  const dispatch = useDispatch();
+  const [photo, setPhoto] = useState("");
+  const { posts } = useSelector(selectPosts);
+  const { user } = useSelector(selectUser);
+  const isLoading = useSelector(selectIsLoading);
+  const error = useSelector(selectError);
+
+  const lastPost = useSelector(selectLastCreatedPost);
+  const isPostsLoading = useSelector(selectPostsLoading);
+  const postsLoadingError = useSelector(selectPostsError);
+
+  useEffect(() => {
+    if (user?.uid) {
+      dispatch(loadPosts(user.uid));
+    }
+  }, [lastPost, user]);
+
+  const handleLogout = () => {
+    dispatch(logoutUser());
+  };
 
   const handlePhotoUpload = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        alert('Необхідний дозвіл на доступ до галереї');
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (status !== "granted") {
+        alert("Необхідний дозвіл на доступ до галереї");
         return;
       }
 
@@ -42,10 +75,9 @@ const RegistrationScreen = ({  navigation }) => {
       if (!result.canceled) {
         setPhoto(result.assets[0].uri);
       }
-
     } catch (error) {
-      console.log('Помилка при завантаженні фото:', error);
-      alert('Помилка при завантаженні фото');
+      console.log("Помилка при завантаженні фото:", error);
+      alert("Помилка при завантаженні фото");
     }
   };
 
@@ -53,83 +85,70 @@ const RegistrationScreen = ({  navigation }) => {
     setPhoto("");
   };
 
-  const testPosts = [
-    {
-      image: require('../../assets/default-avatar.jpg'),
-      title: "Ліс",
-      location: "Ivano-Frankivs'k Region, Ukraine",
-    },
-    {
-      image: require('../../assets/default-avatar.jpg'),
-      title: "Ліс",
-      location: "Ivano-Frankivs'k Region, Ukraine",
-    },
-    {
-      image: require('../../assets/default-avatar.jpg'),
-      title: "Ліс",
-      location: "Ivano-Frankivs'k Region, Ukraine",
-    },
-    {
-      image: require('../../assets/default-avatar.jpg'),
-      title: "Ліс",
-      location: "Ivano-Frankivs'k Region, Ukraine",
-    },
-  ]
-
-
-
   return (
+    <>
+      <Image
+        source={require("../../assets/background.png")}
+        resizeMode="cover"
+        style={styles.image}
+      />
 
-      <>
-        <Image
-          source={require("../../assets/background.png")}
-          resizeMode="cover"
-          style={styles.image}
-        />
+      <View style={styles.container}>
+        <View style={styles.formContainer}>
+          {!isLoading ? (
+            <LogoutButton style={styles.logoutButton} onPress={handleLogout} />
+          ) : (
+            <ActivityIndicator size="small" style={styles.logoutButton} />
+          )}
 
-        <View
-          style={styles.container}
-        >
-          <View style={styles.formContainer}>
+          <View style={styles.photoContainer}>
+            {photo && (
+              <>
+                <Image source={{ uri: photo }} style={styles.photo} />
+                <Pressable
+                  onPress={handlePhotoRemove}
+                  style={styles.circlePlus}
+                >
+                  <CircleCrossSvg />
+                </Pressable>
+              </>
+            )}
 
-          <LogoutButton
-              style={styles.logoutButton}
-              onPress={() => navigation.navigate('Login')}
-            />
-
-            <View style={styles.photoContainer}>
-
-                {photo && (
-                    <>
-                    <Image source={{ uri: photo }} style={styles.photo} />
-                    <Pressable onPress={handlePhotoRemove} style={styles.circlePlus}>
-                        <CircleCrossSvg/>
-                    </Pressable>
-                    </>
-                )}
-
-                {!photo && (
-                    <Pressable onPress={handlePhotoUpload} style={styles.circlePlus}>
-                        <CirclePlusSvg/>
-                    </Pressable>
-                )}
-
-            </View>
-
-            <Text style={styles.title}>Natali Romanova</Text>
-
-            {/* Posts */}
-            <FlatList
-                style={styles.postsContainer}
-                data={testPosts}
-                renderItem={({ item }) => (
-                    <Post image={item.image} title={item.title} location={item.location} />
-                )}
-                />
-
+            {!photo && (
+              <Pressable onPress={handlePhotoUpload} style={styles.circlePlus}>
+                <CirclePlusSvg />
+              </Pressable>
+            )}
           </View>
+
+          <Text style={styles.title}>{user?.displayName}</Text>
+
+          {/* Posts */}
+          {isPostsLoading ? (
+            <ActivityIndicator size="large" color={colors.blue} />
+          ) : (
+            <FlatList
+              style={styles.postsContainer}
+              data={posts}
+              renderItem={({ item }) => (
+                <Post
+                  key={item.id}
+                  image={{ uri: item.image }}
+                  title={item.title}
+                  location={item.address}
+                  onLocationPress={() =>
+                    navigation.navigate("MapScreen", { postId: item.id })
+                  }
+                  onCommentsPress={() =>
+                    navigation.navigate("CommentsScreen", { postId: item.id })
+                  }
+                />
+              )}
+            />
+          )}
         </View>
-      </>
+      </View>
+    </>
   );
 };
 
@@ -155,7 +174,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     height: "100%",
-    width: "100%"
+    width: "100%",
   },
   formContainer: {
     width: SCREEN_WIDTH,
@@ -230,6 +249,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
     top: 22,
-
   },
 });
